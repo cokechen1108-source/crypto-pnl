@@ -1,5 +1,22 @@
 {
+  "name": "crypto-pnl-platform",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "start:dev": "npm -w apps/api run start:dev",
+    "dev:api": "npm -w apps/api run start:dev",
+    "dev:web": "npm -w apps/web run dev",
+    "kill:port": "lsof -t -i :3001 | xargs kill 2>/dev/null || true",
+    "build:api": "npm -w apps/api run build",
+    "build:web": "npm -w apps/web run build",
+    "lint:api": "npm -w apps/api run lint",
+    "lint:web": "npm -w apps/web run lint"
+  },
   "devDependencies": {
+    "@rollup/rollup-darwin-arm64": "^4.57.1",
     "tsx": "^4.21.0"
   }
 }

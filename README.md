@@ -114,3 +114,9 @@ npx tsx scripts/runDemo.ts
 
 - **当前生效的评分逻辑**：`lib/score/creatorScore.ts` — Content（原创性 + 洞察力 + 互动质量 + Minara 亲和）与 Derivative（转推/粉丝比），再按 6:4 合成总分。
 - **扩展方向**：接入真实推文/交易时，可改用 `contentScore.ts` 与 `derivativeScore.ts` 的接口，并替换 mock 数据源；情绪部分仍由 `textAnalysis.ts` 提供规则分数，后续可替换为模型。
+
+---
+
+## 部署（Vercel + Railway）
+
+见 `DEPLOY_VERCEL_RAILWAY.md`。

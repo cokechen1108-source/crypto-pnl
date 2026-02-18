@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum ExchangeName {
+  BYBIT
+  BINANCE
+  OKX
+}
+
+enum TradeSide {
+  LONG
+  SHORT
+}
+
+enum ExecutionSide {
+  BUY
+  SELL
+}
+
+model ExchangeAccount {
+  id            String   @id @default(cuid())
+  userId        String
+  exchange      ExchangeName
+  name          String
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  apiKey        ApiKey?
+  rawTrades     RawTrade[]
+  rawPositions  RawPosition[]
+  rawFunding    RawFunding[]
+  rawFees       RawFee[]
+  trades        Trade[]
+  dailyPnl      DailyPnl[]
+  monthlyPnl    MonthlyPnl[]
+
+  @@index([userId, exchange])
+}
+
+model ApiKey {
+  id                 String   @id @default(cuid())
+  exchangeAccountId  String   @unique
+  encryptedKey       String
+  encryptedSecret    String
+  encryptedPassphrase String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  exchangeAccount    ExchangeAccount @relation(fields: [exchangeAccountId], references: [id], onDelete: Cascade)
+}
+
+model RawTrade {
+  id                String   @id @default(cuid())
+  exchangeAccountId String
+  exchangeTradeId   String
+  symbol            String
+  marketType        String
+  side              ExecutionSide
+  price             Decimal
+  amount            Decimal
+  fee               Decimal?
+  feeCurrency       String?
+  realizedPnl       Decimal?
+  orderId           String?
+  tradeTimestamp    DateTime
+  createdAt         DateTime @default(now())
+  exchangeAccount   ExchangeAccount @relation(fields: [exchangeAccountId], references: [id], onDelete: Cascade)
+  executions        TradeExecution[]
+
+  @@unique([exchangeAccountId, exchangeTradeId])
+  @@index([exchangeAccountId, tradeTimestamp])
+  @@index([symbol, tradeTimestamp])
+}
+
+model RawPosition {
+  id                String   @id @default(cuid())
+  exchangeAccountId String
+  symbol            String
+  side              TradeSide
+  size              Decimal
+  entryPrice        Decimal
+  unrealizedPnl     Decimal?
+  leverage          Decimal?
+  marginMode        String?
+  updatedTimestamp  DateTime
+  createdAt         DateTime @default(now())
+  exchangeAccount   ExchangeAccount @relation(fields: [exchangeAccountId], references: [id], onDelete: Cascade)
+
+  @@index([exchangeAccountId, updatedTimestamp])
+}
+
+model RawFunding {
+  id                String   @id @default(cuid())
+  exchangeAccountId String
+  symbol            String
+  fundingRate       Decimal?
+  fundingFee        Decimal
+  fundingTimestamp  DateTime
+  createdAt         DateTime @default(now())
+  exchangeAccount   ExchangeAccount @relation(fields: [exchangeAccountId], references: [id], onDelete: Cascade)
+
+  @@index([exchangeAccountId, fundingTimestamp])
+}
+
+model RawFee {
+  id                String   @id @default(cuid())
+  exchangeAccountId String
+  symbol            String
+  fee              Decimal
+  feeCurrency      String
+  feeTimestamp     DateTime
+  createdAt        DateTime @default(now())
+  exchangeAccount  ExchangeAccount @relation(fields: [exchangeAccountId], references: [id], onDelete: Cascade)
+
+  @@index([exchangeAccountId, feeTimestamp])
+}
+
+model Trade {
+  id                String   @id @default(cuid())
+  exchangeAccountId String
+  symbol            String
+  marketType        String
+  side              TradeSide
+  status            String
+  entryTime         DateTime
+  exitTime          DateTime?
+  entryPrice        Decimal
+  exitPrice         Decimal?
+  size             Decimal
+  realizedPnl      Decimal
+  feeTotal         Decimal
+  fundingTotal     Decimal
+  durationSeconds  Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  exchangeAccount  ExchangeAccount @relation(fields: [exchangeAccountId], references: [id], onDelete: Cascade)
+  executions       TradeExecution[]
+  legs             TradeLeg[]
+
+  @@index([exchangeAccountId, entryTime])
+  @@index([symbol, entryTime])
+}
+
+model TradeExecution {
+  id          String   @id @default(cuid())
+  tradeId     String
+  rawTradeId  String
+  side        ExecutionSide
+  price       Decimal
+  amount      Decimal
+  fee         Decimal?
+  feeCurrency String?
+  timestamp   DateTime
+  createdAt   DateTime @default(now())
+  trade       Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  rawTrade    RawTrade @relation(fields: [rawTradeId], references: [id], onDelete: Restrict)
+
+  @@index([tradeId, timestamp])
+}
+
+model TradeLeg {
+  id             String   @id @default(cuid())
+  tradeId        String
+  side           TradeSide
+  size           Decimal
+  entryPrice     Decimal
+  exitPrice      Decimal?
+  entryTime      DateTime
+  exitTime       DateTime?
+  realizedPnl    Decimal
+  feeTotal       Decimal
+  fundingTotal   Decimal
+  createdAt      DateTime @default(now())
+  trade          Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  @@index([tradeId, entryTime])
+}
+
+model DailyPnl {
+  id                String   @id @default(cuid())
+  exchangeAccountId String
+  date              DateTime
+  realizedPnl        Decimal
+  feeTotal           Decimal
+  fundingTotal       Decimal
+  createdAt          DateTime @default(now())
+  exchangeAccount    ExchangeAccount @relation(fields: [exchangeAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([exchangeAccountId, date])
+}
+
+model MonthlyPnl {
+  id                String   @id @default(cuid())
+  exchangeAccountId String
+  month             DateTime
+  realizedPnl        Decimal
+  feeTotal           Decimal
+  fundingTotal       Decimal
+  createdAt          DateTime @default(now())
+  exchangeAccount    ExchangeAccount @relation(fields: [exchangeAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([exchangeAccountId, month])
+}
