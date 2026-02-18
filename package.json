@@ -16,7 +16,6 @@
     "lint:web": "npm -w apps/web run lint"
   },
   "devDependencies": {
-    "@rollup/rollup-darwin-arm64": "^4.57.1",
     "tsx": "^4.21.0"
   }
 }
