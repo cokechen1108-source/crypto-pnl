@@ -111,12 +111,13 @@ export default function PnlCalendar({
         {days.map((day) => {
           const key = format(day, 'yyyy-MM-dd');
           const row = pnlMap.get(key);
+          const hasPnl = row != null;
           const pnl = row?.realizedPnl ?? 0;
           const isPositive = pnl >= 0;
-          const hasPnl = row != null;
           const hasActivity = activitySet.has(key);
           const hasData = hasPnl || hasActivity;
           const isSelected = selectedDate === key;
+          const pnlText = hasPnl ? formatPnlShort(pnl) : hasActivity ? '·' : '';
           return (
             <button
               key={key}
@@ -133,7 +134,7 @@ export default function PnlCalendar({
             >
               <span className="date">{format(day, 'd')}</span>
               <span className={isPositive ? 'pnl positive' : 'pnl negative'} aria-label={isPositive ? '盈利' : '亏损'}>
-                {hasPnl ? formatPnlShort(pnl) : hasActivity ? '·' : formatPnlShort(0)}
+                {pnlText}
               </span>
             </button>
           );
