@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   addMonths,
   eachDayOfInterval,
@@ -38,7 +38,27 @@ export default function PnlCalendar({
   onSelectDate,
   selectedDate,
 }: Props) {
-  const [viewMonth, setViewMonth] = useState(() => new Date());
+  const allDateKeys = useMemo(() => {
+    const keys = new Set<string>(activityDates);
+    for (const row of rows) {
+      const raw = row.date ?? row.month ?? '';
+      if (!raw) continue;
+      keys.add(raw.slice(0, 10));
+    }
+    return Array.from(keys).sort();
+  }, [rows, activityDates]);
+  const latestDateKey = allDateKeys[allDateKeys.length - 1] ?? null;
+  const [viewMonth, setViewMonth] = useState(() =>
+    latestDateKey ? new Date(`${latestDateKey}T12:00:00`) : new Date(),
+  );
+  const initializedByDataRef = useRef(false);
+
+  useEffect(() => {
+    if (!latestDateKey || initializedByDataRef.current) return;
+    initializedByDataRef.current = true;
+    setViewMonth(new Date(`${latestDateKey}T12:00:00`));
+  }, [latestDateKey]);
+
   const start = startOfWeek(startOfMonth(viewMonth), { weekStartsOn: 1 });
   const end = endOfWeek(endOfMonth(viewMonth), { weekStartsOn: 1 });
   const days = eachDayOfInterval({ start, end });
@@ -47,10 +67,12 @@ export default function PnlCalendar({
   for (const row of rows) {
     const raw = row.date ?? row.month ?? '';
     if (!raw) continue;
-    const d = new Date(raw);
+    const d = raw.length <= 10 ? new Date(`${raw.slice(0, 10)}T12:00:00`) : new Date(raw);
     if (Number.isNaN(d.getTime())) continue;
     pnlMap.set(format(d, 'yyyy-MM-dd'), row);
   }
+  const monthPrefix = format(viewMonth, 'yyyy-MM');
+  const monthHasActivity = allDateKeys.some((d) => d.startsWith(monthPrefix));
 
   if (loading) {
     return <div className="empty">加载中...</div>;
@@ -67,6 +89,19 @@ export default function PnlCalendar({
           下一月
         </button>
       </div>
+      {!monthHasActivity && latestDateKey && (
+        <p className="calendar-empty-hint">
+          当前月份无交易。最近交易日：{latestDateKey}
+          {' · '}
+          <button
+            type="button"
+            onClick={() => setViewMonth(new Date(`${latestDateKey}T12:00:00`))}
+            className="btn btn-sm"
+          >
+            跳转
+          </button>
+        </p>
+      )}
       <div className="calendar-header">
         {['一', '二', '三', '四', '五', '六', '日'].map((day) => (
           <span key={day}>{day}</span>

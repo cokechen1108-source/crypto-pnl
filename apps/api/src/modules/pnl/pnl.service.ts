@@ -6,85 +6,97 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class PnlService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private toLocalDateKey(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  private toLocalMonthKey(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}-01`;
+  }
+
   async getDailyPnl(accountId: string, from?: Date, to?: Date) {
-    // exitTime 在 SQLite 中为 Unix 毫秒数，比较时用数值
-    const fromMs = from?.getTime();
-    const toMs = to?.getTime();
-    const where = Prisma.sql`
-      where "exchangeAccountId" = ${accountId}
-      ${fromMs != null ? Prisma.sql`and "exitTime" >= ${fromMs}` : Prisma.empty}
-      ${toMs != null ? Prisma.sql`and "exitTime" <= ${toMs}` : Prisma.empty}
-    `;
+    const trades = await this.prisma.trade.findMany({
+      where: {
+        exchangeAccountId: accountId,
+        status: 'CLOSED',
+        exitTime: {
+          not: null,
+          ...(from ? { gte: from } : {}),
+          ...(to ? { lte: to } : {}),
+        },
+      },
+      select: {
+        exitTime: true,
+        realizedPnl: true,
+        feeTotal: true,
+        fundingTotal: true,
+      },
+      orderBy: { exitTime: 'asc' },
+    });
 
-    // Prisma/SQLite 将 DateTime 存为 Unix 毫秒数，需用 datetime(exitTime/1000,'unixepoch') 再取日期
-    const dateExpr = Prisma.sql`strftime('%Y-%m-%d', datetime("exitTime" / 1000, 'unixepoch', 'localtime'))`;
-    const rows = await this.prisma.$queryRaw<
-      {
-        date: string;
-        realizedPnl: Prisma.Decimal;
-        feeTotal: Prisma.Decimal;
-        fundingTotal: Prisma.Decimal;
-      }[]
-    >(Prisma.sql`
-      select
-        ${dateExpr} as date,
-        sum("realizedPnl") as "realizedPnl",
-        sum("feeTotal") as "feeTotal",
-        sum("fundingTotal") as "fundingTotal"
-      from "Trade"
-      ${where}
-      and "status" = 'CLOSED'
-      and "exitTime" is not null
-      group by ${dateExpr}
-      order by date asc
-    `);
+    const map = new Map<
+      string,
+      { realizedPnl: number; feeTotal: number; fundingTotal: number }
+    >();
+    for (const t of trades) {
+      if (!t.exitTime) continue;
+      const key = this.toLocalDateKey(new Date(t.exitTime));
+      const prev = map.get(key) ?? { realizedPnl: 0, feeTotal: 0, fundingTotal: 0 };
+      map.set(key, {
+        realizedPnl: prev.realizedPnl + Number(t.realizedPnl),
+        feeTotal: prev.feeTotal + Number(t.feeTotal),
+        fundingTotal: prev.fundingTotal + Number(t.fundingTotal),
+      });
+    }
 
-    return rows.map((row) => ({
-      date: row.date,
-      realizedPnl: new Prisma.Decimal(row.realizedPnl).toNumber(),
-      feeTotal: new Prisma.Decimal(row.feeTotal).toNumber(),
-      fundingTotal: new Prisma.Decimal(row.fundingTotal).toNumber(),
-    }));
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, v]) => ({ date, ...v }));
   }
 
   async getMonthlyPnl(accountId: string, from?: Date, to?: Date) {
-    const fromMs = from?.getTime();
-    const toMs = to?.getTime();
-    const where = Prisma.sql`
-      where "exchangeAccountId" = ${accountId}
-      ${fromMs != null ? Prisma.sql`and "exitTime" >= ${fromMs}` : Prisma.empty}
-      ${toMs != null ? Prisma.sql`and "exitTime" <= ${toMs}` : Prisma.empty}
-    `;
+    const trades = await this.prisma.trade.findMany({
+      where: {
+        exchangeAccountId: accountId,
+        status: 'CLOSED',
+        exitTime: {
+          not: null,
+          ...(from ? { gte: from } : {}),
+          ...(to ? { lte: to } : {}),
+        },
+      },
+      select: {
+        exitTime: true,
+        realizedPnl: true,
+        feeTotal: true,
+        fundingTotal: true,
+      },
+      orderBy: { exitTime: 'asc' },
+    });
 
-    // Prisma/SQLite 将 DateTime 存为 Unix 毫秒数，需先转成 datetime 再按月初分组
-    const monthExpr = Prisma.sql`strftime('%Y-%m-01', datetime("exitTime" / 1000, 'unixepoch', 'localtime'))`;
-    const rows = await this.prisma.$queryRaw<
-      {
-        month: string;
-        realizedPnl: Prisma.Decimal;
-        feeTotal: Prisma.Decimal;
-        fundingTotal: Prisma.Decimal;
-      }[]
-    >(Prisma.sql`
-      select
-        ${monthExpr} as month,
-        sum("realizedPnl") as "realizedPnl",
-        sum("feeTotal") as "feeTotal",
-        sum("fundingTotal") as "fundingTotal"
-      from "Trade"
-      ${where}
-      and "status" = 'CLOSED'
-      and "exitTime" is not null
-      group by strftime('%Y-%m', datetime("exitTime" / 1000, 'unixepoch', 'localtime'))
-      order by month asc
-    `);
+    const map = new Map<
+      string,
+      { realizedPnl: number; feeTotal: number; fundingTotal: number }
+    >();
+    for (const t of trades) {
+      if (!t.exitTime) continue;
+      const key = this.toLocalMonthKey(new Date(t.exitTime));
+      const prev = map.get(key) ?? { realizedPnl: 0, feeTotal: 0, fundingTotal: 0 };
+      map.set(key, {
+        realizedPnl: prev.realizedPnl + Number(t.realizedPnl),
+        feeTotal: prev.feeTotal + Number(t.feeTotal),
+        fundingTotal: prev.fundingTotal + Number(t.fundingTotal),
+      });
+    }
 
-    return rows.map((row) => ({
-      month: row.month,
-      realizedPnl: new Prisma.Decimal(row.realizedPnl).toNumber(),
-      feeTotal: new Prisma.Decimal(row.feeTotal).toNumber(),
-      fundingTotal: new Prisma.Decimal(row.fundingTotal).toNumber(),
-    }));
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([month, v]) => ({ month, ...v }));
   }
 
   /** 账户下所有已平仓交易的累计已实现 PnL（用于仪表盘大数） */
