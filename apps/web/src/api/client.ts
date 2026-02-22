@@ -283,6 +283,51 @@ export async function fetchDailyPnl(accountId: string) {
   return request<PnlRow[]>(`/pnl/daily?accountId=${accountId}`);
 }
 
+function toLocalDateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * 优先使用后端 daily 接口；若后端异常（如 500），
+ * 前端回退到按交易列表聚合，避免日历只显示活动点而无数值。
+ */
+export async function fetchDailyPnlSafe(accountId: string) {
+  try {
+    return await fetchDailyPnl(accountId);
+  } catch {
+    const pageSize = 1000;
+    let page = 1;
+    let totalPages = 1;
+    const map = new Map<
+      string,
+      { realizedPnl: number; feeTotal: number; fundingTotal: number }
+    >();
+
+    while (page <= totalPages && page <= 50) {
+      const res = await fetchTrades(accountId, undefined, undefined, page, pageSize);
+      totalPages = Math.max(1, Math.ceil(res.total / res.pageSize));
+      for (const t of res.items) {
+        if (t.status !== 'CLOSED' || !t.exitTime) continue;
+        const key = toLocalDateKey(new Date(t.exitTime));
+        const prev = map.get(key) ?? { realizedPnl: 0, feeTotal: 0, fundingTotal: 0 };
+        map.set(key, {
+          realizedPnl: prev.realizedPnl + Number(t.realizedPnl ?? 0),
+          feeTotal: prev.feeTotal + Number(t.feeTotal ?? 0),
+          fundingTotal: prev.fundingTotal + Number(t.fundingTotal ?? 0),
+        });
+      }
+      page += 1;
+    }
+
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, v]) => ({ date, ...v }));
+  }
+}
+
 export async function fetchTradeActivityDays(accountId: string) {
   return request<string[]>(`/pnl/activity-days?accountId=${encodeURIComponent(accountId)}`);
 }

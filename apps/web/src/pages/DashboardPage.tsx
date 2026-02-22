@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  fetchDailyPnl,
+  fetchDailyPnlSafe,
   fetchTradeActivityDays,
   fetchTotalPnl,
   fetchTrades,
@@ -68,7 +68,7 @@ export default function DashboardPage() {
 
   const dailyPnlQuery = useQuery({
     queryKey: ['dailyPnl', effectiveAccountId],
-    queryFn: () => fetchDailyPnl(effectiveAccountId),
+    queryFn: () => fetchDailyPnlSafe(effectiveAccountId),
     enabled: Boolean(effectiveAccountId),
   });
 
